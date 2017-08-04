@@ -11,7 +11,17 @@
 
 // @flow
 import ApolloClient, { createNetworkInterface, ApolloError } from "../src";
-import type { ApolloQueryResult, MiddlewareInterface, AfterwareInterface } from "../src";
+import type {
+    ApolloQueryResult,
+    MiddlewareInterface,
+    AfterwareInterface,
+    Request,
+    HTTPNetworkInterface,
+    Store as ApolloState,
+    ApolloAction
+} from "../src";
+import {combineReducers, createStore, applyMiddleware} from 'redux';
+import type {Store as ReduxStore} from 'redux';
 import type { DocumentNode } from "graphql";
 import gql from "graphql-tag";
 
@@ -24,9 +34,7 @@ const mutation: DocumentNode = gql`mutation { foo }`;
 const client = new ApolloClient("localhost:3000");
 
 // $ExpectError
-const client1 = new ApolloClient({
-  networkInterface: true,
-});
+const client1 = new ApolloClient({ networkInterface: true });
 
 const networkInterface1 = createNetworkInterface("localhost:3000");
 
@@ -69,6 +77,29 @@ const data = client.query({ query });
 // $ExpectError
 console.log(data.loading);
 
+class CustomNetworkInterface {
+  networkInterface: HTTPNetworkInterface;
+
+  constructor(networkInterface: HTTPNetworkInterface) {
+    this.networkInterface = networkInterface;
+  }
+
+  query(request: Request) {
+   return this.networkInterface.query(request);
+  }
+}
+
+const client3 = new ApolloClient({
+  networkInterface: new CustomNetworkInterface(networkInterface1)
+})
+
+class BadCustomNetworkInterface {}
+
+const client4 = new ApolloClient({
+  // $ExpectError
+  networkInterface: BadCustomNetworkInterface
+});
+
 // $ExpectError
 const status: Promise<ApolloError | boolean> = data.then(({ data, error }) => {
   const foo = data.loading;
@@ -84,3 +115,20 @@ const result: ApolloQueryResult<mixed> = observable.result();
 
 // $ExpectError
 const current: Promise<ApolloQueryResult<mixed>> = observable.currentResult();
+
+const client5 = new ApolloClient({
+    networkInterface: networkInterface1
+});
+
+const reducer = combineReducers({
+    apollo: client5.reducer()
+});
+
+type State = {
+    apollo: ApolloState
+};
+
+const store: ReduxStore<State, ApolloAction> = createStore(
+    reducer,
+    applyMiddleware(client5.middleware())
+);
